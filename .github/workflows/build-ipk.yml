@@ -1,0 +1,48 @@
+name: Build IPK
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'Package name to build'
+        required: true
+        default: 'luci-app-autoupdate'
+      openwrt_branch:
+        description: 'OpenWrt branch'
+        required: false
+        default: 'openwrt-24.10'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup build environment
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache flex bison libssl-dev \
+            libelf-dev autoconf automake libtool pkg-config zlib1g-dev \
+            libncurses5-dev git curl wget
+
+      - name: Clone ImmortalWrt
+        run: |
+          git clone -b ${{ github.event.inputs.openwrt_branch }} \
+            --depth 1 https://github.com/immortalwrt/immortalwrt.git ~/openwrt
+
+      - name: Update feeds
+        run: |
+          cd ~/openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Build package
+        run: |
+          cd ~/openwrt
+          make package/${{ github.event.inputs.package_name }}/compile V=s -j$(nproc)
+
+      - name: Upload IPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipk-output
+          path: ~/openwrt/bin/packages/*/${{ github.event.inputs.package_name }}*.ipk
