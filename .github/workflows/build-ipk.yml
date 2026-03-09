@@ -7,8 +7,8 @@ on:
         description: 'Package name (e.g., luci-app-autoupdate)'
         required: true
         type: string
-      repo_url:
-        description: 'GitHub repo URL (e.g., waynesg/luci-app-autoupdate)'
+      repo:
+        description: 'GitHub repo (owner/repo, e.g., waynesg/luci-app-autoupdate)'
         required: true
         type: string
       branch:
@@ -29,7 +29,7 @@ jobs:
       - name: Clone package source
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.inputs.repo_url }}
+          repository: ${{ github.event.inputs.repo }}
           ref: ${{ github.event.inputs.branch }}
           path: package
 
