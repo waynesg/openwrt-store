@@ -1,4 +1,4 @@
-name: Build IPK from Source
+name: Build IPK
 
 on:
   workflow_dispatch:
@@ -8,17 +8,16 @@ on:
         required: true
         type: string
       repo_url:
-        description: 'Git repo URL (default: waynesg/openwrt-store)'
-        required: false
+        description: 'GitHub repo URL (e.g., waynesg/luci-app-autoupdate)'
+        required: true
         type: string
-        default: ''
       branch:
         description: 'Branch or tag'
         required: false
         type: string
         default: 'main'
-      profile:
-        description: 'Target profile'
+      target:
+        description: 'Target (x86_64, aarch64)'
         required: false
         type: string
         default: 'x86_64'
@@ -27,12 +26,13 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - name: Clone package source
+        uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.inputs.repo_url || 'waynesg/openwrt-store' }}
+          repository: ${{ github.event.inputs.repo_url }}
           ref: ${{ github.event.inputs.branch }}
-          path: custom-package
-          
+          path: package
+
       - name: Install deps
         run: |
           sudo apt-get update
@@ -51,28 +51,23 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Copy custom package
+      - name: Copy package
         run: |
           cd ~/openwrt
-          PKG_NAME="${{ github.event.inputs.package }}"
-          cp -r ${{ github.workspace }}/custom-package/$PKG_NAME package/feeds/packages/$PKG_NAME || \
-          mkdir -p package/$PKG_NAME && \
-          cp -r ${{ github.workspace }}/custom-package/$PKG_NAME/* package/$PKG_NAME/
+          PKG="${{ github.event.inputs.package }}"
+          mkdir -p package/$PKG
+          cp -r ${{ github.workspace }}/package/* package/$PKG/
 
       - name: Build
         run: |
           cd ~/openwrt
           make defconfig
-          # Enable the package in config
           echo "CONFIG_PACKAGE_${{ github.event.inputs.package }}=y" >> .config
-          make ${{ github.event.inputs.profile }}/compile V=s -j$(nproc) || true
-
-      - name: Find and upload IPK
-        run: |
-          find ~/openwrt/bin -name "*${{ github.event.inputs.package }}*.ipk" -type f
+          make -j$(nproc) 2>&1 | tail -50 || true
 
       - name: Upload IPK
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event.inputs.package }}-ipk
+          name: ${{ github.event.inputs.package }}-${{ github.event.inputs.target }}
           path: ~/openwrt/bin/packages/**/${{ github.event.inputs.package }}*.ipk
+          retention-days: 5
