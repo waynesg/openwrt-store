@@ -6,14 +6,22 @@ on:
       package:
         description: 'Package name (e.g., luci-app-autoupdate)'
         required: true
+        type: string
       repo_url:
-        description: 'Git repo URL for package (optional)'
+        description: 'Git repo URL (default: waynesg/openwrt-store)'
         required: false
+        type: string
         default: ''
       branch:
         description: 'Branch or tag'
         required: false
+        type: string
         default: 'main'
+      profile:
+        description: 'Target profile'
+        required: false
+        type: string
+        default: 'x86_64'
 
 jobs:
   build:
@@ -21,15 +29,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.inputs.repo_url || 'waynesg/luci-app-autoupdate' }}
+          repository: ${{ github.event.inputs.repo_url || 'waynesg/openwrt-store' }}
           ref: ${{ github.event.inputs.branch }}
+          path: custom-package
           
       - name: Install deps
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential ccache flex bison libssl-dev \
             libelf-dev autoconf automake libtool pkg-config zlib1g-dev \
-            libncurses5-dev git curl wget gawk libncursesw5-dev
+            libncurses5-dev git curl wget gawk
 
       - name: Clone ImmortalWrt
         run: |
@@ -42,21 +51,25 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Prepare package
+      - name: Copy custom package
         run: |
           cd ~/openwrt
-          # Copy package to packages directory
-          mkdir -p package/custom/${{ github.event.inputs.package }}
-          cp -r ${{ github.workspace }}/* package/custom/${{ github.event.inputs.package }}/
+          PKG_NAME="${{ github.event.inputs.package }}"
+          cp -r ${{ github.workspace }}/custom-package/$PKG_NAME package/feeds/packages/$PKG_NAME || \
+          mkdir -p package/$PKG_NAME && \
+          cp -r ${{ github.workspace }}/custom-package/$PKG_NAME/* package/$PKG_NAME/
 
       - name: Build
         run: |
           cd ~/openwrt
-          make package/custom/${{ github.event.inputs.package }}/compile V=s -j$(nproc)
+          make defconfig
+          # Enable the package in config
+          echo "CONFIG_PACKAGE_${{ github.event.inputs.package }}=y" >> .config
+          make ${{ github.event.inputs.profile }}/compile V=s -j$(nproc) || true
 
-      - name: Find IPK
+      - name: Find and upload IPK
         run: |
-          find ~/openwrt/bin -name "*.ipk" -path "*${{ github.event.inputs.package }}*"
+          find ~/openwrt/bin -name "*${{ github.event.inputs.package }}*.ipk" -type f
 
       - name: Upload IPK
         uses: actions/upload-artifact@v4
