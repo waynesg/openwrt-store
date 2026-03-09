@@ -1,48 +1,65 @@
-name: Build IPK
+name: Build IPK from Source
 
 on:
   workflow_dispatch:
     inputs:
-      package_name:
-        description: 'Package name to build'
+      package:
+        description: 'Package name (e.g., luci-app-autoupdate)'
         required: true
-        default: 'luci-app-autoupdate'
-      openwrt_branch:
-        description: 'OpenWrt branch'
+      repo_url:
+        description: 'Git repo URL for package (optional)'
         required: false
-        default: 'openwrt-24.10'
+        default: ''
+      branch:
+        description: 'Branch or tag'
+        required: false
+        default: 'main'
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup build environment
+        with:
+          repository: ${{ github.event.inputs.repo_url || 'waynesg/luci-app-autoupdate' }}
+          ref: ${{ github.event.inputs.branch }}
+          
+      - name: Install deps
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential ccache flex bison libssl-dev \
             libelf-dev autoconf automake libtool pkg-config zlib1g-dev \
-            libncurses5-dev git curl wget
+            libncurses5-dev git curl wget gawk libncursesw5-dev
 
       - name: Clone ImmortalWrt
         run: |
-          git clone -b ${{ github.event.inputs.openwrt_branch }} \
-            --depth 1 https://github.com/immortalwrt/immortalwrt.git ~/openwrt
+          git clone -b openwrt-24.10 --depth 1 \
+            https://github.com/immortalwrt/immortalwrt.git ~/openwrt
 
-      - name: Update feeds
+      - name: Setup feeds
         run: |
           cd ~/openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Build package
+      - name: Prepare package
         run: |
           cd ~/openwrt
-          make package/${{ github.event.inputs.package_name }}/compile V=s -j$(nproc)
+          # Copy package to packages directory
+          mkdir -p package/custom/${{ github.event.inputs.package }}
+          cp -r ${{ github.workspace }}/* package/custom/${{ github.event.inputs.package }}/
+
+      - name: Build
+        run: |
+          cd ~/openwrt
+          make package/custom/${{ github.event.inputs.package }}/compile V=s -j$(nproc)
+
+      - name: Find IPK
+        run: |
+          find ~/openwrt/bin -name "*.ipk" -path "*${{ github.event.inputs.package }}*"
 
       - name: Upload IPK
         uses: actions/upload-artifact@v4
         with:
-          name: ipk-output
-          path: ~/openwrt/bin/packages/*/${{ github.event.inputs.package_name }}*.ipk
+          name: ${{ github.event.inputs.package }}-ipk
+          path: ~/openwrt/bin/packages/**/${{ github.event.inputs.package }}*.ipk
