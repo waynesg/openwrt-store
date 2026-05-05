@@ -55,39 +55,19 @@ jobs:
         run: |
           cd ~/openwrt
           PKG="${{ github.event.inputs.package }}"
-
-          rm -rf package/$PKG
-
-          if [ -f "${{ github.workspace }}/package/Makefile" ]; then
-            mkdir -p package/$PKG
-            cp -r ${{ github.workspace }}/package/* package/$PKG/
-          elif [ -f "${{ github.workspace }}/package/$PKG/Makefile" ]; then
-            cp -r ${{ github.workspace }}/package/$PKG package/$PKG
-          else
-            echo "ERROR: Cannot find package Makefile"
-            find ${{ github.workspace }}/package -maxdepth 4 -type f -name Makefile -print
-            exit 1
-          fi
-
-          echo "=== Package tree ==="
-          find package/$PKG -maxdepth 3 -type f | sort
-          test -f package/$PKG/Makefile
+          mkdir -p package/$PKG
+          cp -r ${{ github.workspace }}/package/* package/$PKG/
 
       - name: Build
         run: |
           cd ~/openwrt
-          PKG="${{ github.event.inputs.package }}"
-
-          echo "CONFIG_PACKAGE_${PKG}=m" >> .config
           make defconfig
-
-          make package/$PKG/compile V=s
-
-          find /home/runner/openwrt/bin/packages -name "*${PKG}*.ipk" -print
+          echo "CONFIG_PACKAGE_${{ github.event.inputs.package }}=y" >> .config
+          make -j$(nproc) 2>&1 | tail -50 || true
 
       - name: Upload IPK
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.inputs.package }}-${{ github.event.inputs.target }}
-          path: /home/runner/openwrt/bin/packages/**/${{ github.event.inputs.package }}*.ipk
+          path: ~/openwrt/bin/packages/**/${{ github.event.inputs.package }}*.ipk
           retention-days: 5
