@@ -65,7 +65,7 @@ jobs:
             cp -r ${{ github.workspace }}/package/$PKG package/$PKG
           else
             echo "ERROR: Cannot find package Makefile"
-            find ${{ github.workspace }}/package -maxdepth 3 -type f -name Makefile -print
+            find ${{ github.workspace }}/package -maxdepth 4 -type f -name Makefile -print
             exit 1
           fi
 
@@ -83,7 +83,6 @@ jobs:
 
           make package/$PKG/compile V=s
 
-          echo "=== Find IPK ==="
           find /home/runner/openwrt/bin/packages -name "*${PKG}*.ipk" -print
 
       - name: Upload IPK
