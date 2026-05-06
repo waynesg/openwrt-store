@@ -63,7 +63,7 @@ jobs:
           cd ~/openwrt
           make defconfig
           echo "CONFIG_PACKAGE_${{ github.event.inputs.package }}=y" >> .config
-          make package/$PKG/compile V=s
+          make -j$(nproc) || make -j1 V=s
           #make -j$(nproc) 2>&1 | tail -50 || true
 
       - name: Upload IPK
